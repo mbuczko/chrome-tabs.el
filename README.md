@@ -59,6 +59,16 @@ Start the companion server before using the package. The server must be running 
 
 Or via `M-x customize-group RET chrome-tabs`.
 
+### Authentication
+
+If the server requires a Bearer token, add an entry to `~/.authinfo`:
+
+```
+machine 127.0.0.1 login chrome_tabs port 9223 password YOUR_TOKEN_HERE
+```
+
+The package looks up the entry by `login chrome_tabs`, uses `password` as the Authorization Bearer token, and overrides the port in `chrome-tabs-server-url` with the `port` value from the entry.
+
 ## API
 
 The package exposes a small Emacs Lisp API for scripting:

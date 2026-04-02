@@ -34,14 +34,47 @@
   :type 'string
   :group 'chrome-tabs)
 
+;;; Auth helpers
+
+(defun chrome-tabs--authinfo-credentials ()
+  "Return (PORT . TOKEN) from auth sources for the `chrome_tabs' login.
+Looks for an entry with login `chrome_tabs' in any auth source.
+Returns a cons cell (PORT . TOKEN), or nil if no matching entry is found."
+  (require 'auth-source)
+  (let ((results (auth-source-search :user "chrome_tabs" :max 1)))
+    (when results
+      (let* ((entry (car results))
+             (port  (let ((p (plist-get entry :port)))
+                      (when p (format "%s" p))))
+             (token (let ((s (plist-get entry :secret)))
+                      (when s (if (functionp s) (funcall s) s)))))
+        (when (and port token)
+          (cons port token))))))
+
+(defun chrome-tabs--effective-url ()
+  "Return the server base URL, with port overridden from ~/.authinfo when available."
+  (let ((creds (chrome-tabs--authinfo-credentials)))
+    (if creds
+        (let* ((parsed (url-generic-parse-url chrome-tabs-server-url))
+               (host   (url-host parsed)))
+          (format "http://%s:%s" host (car creds)))
+      chrome-tabs-server-url)))
+
 ;;; HTTP helpers
+
+(defun chrome-tabs--auth-headers ()
+  "Return an alist of extra headers including Authorization if a token is found."
+  (let ((creds (chrome-tabs--authinfo-credentials)))
+    (when creds
+      `(("Authorization" . ,(concat "Bearer " (cdr creds)))))))
 
 (defun chrome-tabs--get (path)
   "Make a synchronous GET request to PATH on the server.
 Returns the parsed JSON response as a Lisp object, or signals an error."
-  (let* ((url (concat chrome-tabs-server-url path))
+  (let* ((url (concat (chrome-tabs--effective-url) path))
          (url-request-method "GET")
          (url-show-status nil)
+         (url-request-extra-headers (chrome-tabs--auth-headers))
          (buffer (url-retrieve-synchronously url t)))
     (unless buffer
       (error "chrome-tabs: could not connect to server at %s" url))
@@ -51,10 +84,11 @@ Returns the parsed JSON response as a Lisp object, or signals an error."
   "Make a synchronous POST request to PATH with JSON BODY on the server.
 BODY is a Lisp object that will be JSON-encoded.
 Returns the parsed JSON response, or signals an error."
-  (let* ((url (concat chrome-tabs-server-url path))
+  (let* ((url (concat (chrome-tabs--effective-url) path))
          (url-request-method "POST")
          (url-show-status nil)
-         (url-request-extra-headers '(("Content-Type" . "application/json")))
+         (url-request-extra-headers (append '(("Content-Type" . "application/json"))
+                                            (chrome-tabs--auth-headers)))
          (url-request-data (encode-coding-string (json-encode body) 'utf-8))
          (buffer (url-retrieve-synchronously url t)))
     (unless buffer
