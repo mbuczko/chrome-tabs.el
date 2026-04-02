@@ -168,7 +168,10 @@ GROUP-FN maps an item plist to a group name string."
   "Format TAB as a completion candidate string."
   (let ((title (or (plist-get tab :title) "(no title)"))
         (url   (or (plist-get tab :url)   "")))
-    (format "%-60s  %s" title url)))
+    (let ((title (if (> (length title) 60)
+                     (concat (substring title 0 57) "...")
+                   title)))
+      (format "%-60s  %s" title url))))
 
 (defun chrome-tabs--tab-group (tab)
   "Return the group name for TAB based on its URL."
